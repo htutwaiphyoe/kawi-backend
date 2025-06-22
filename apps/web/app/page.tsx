@@ -1,3 +1,6 @@
+import { PlaceholderSchema as _Placeholder } from '@pyawmal/shared';
+void _Placeholder;
+
 export default function HomePage() {
   return (
     <main style={{ padding: '4rem', textAlign: 'center' }}>
