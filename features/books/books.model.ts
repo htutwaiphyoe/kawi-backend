@@ -22,6 +22,7 @@ export const booksTable = pgTable(
       .references(() => authorsTable.id, { onDelete: "cascade" }),
     isbn: varchar({ length: 20 }).unique(),
     description: varchar({ length: 1000 }),
+    coverUrl: varchar({ length: 500 }),
     price: numeric({ precision: 10, scale: 2 }).notNull(),
     publishedDate: date().notNull(),
     stock: integer().notNull().default(0),

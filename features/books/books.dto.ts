@@ -21,11 +21,13 @@ export const createBookSchema = createInsertSchema(booksTable, {
       .number("Stock must be a number")
       .int("Stock must be a whole number")
       .min(0, "Stock cannot be negative"),
+  coverUrl: () => z.url("CoverUrl must be a valid URL").optional(),
 }).pick({
   title: true,
   authorId: true,
   isbn: true,
   description: true,
+  coverUrl: true,
   price: true,
   publishedDate: true,
   stock: true,
