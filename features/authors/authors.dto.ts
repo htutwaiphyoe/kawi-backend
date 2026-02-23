@@ -11,6 +11,7 @@ export const createAuthorSchema = createInsertSchema(authorsTable, {
   email: () => z.email("Email must be a valid email"),
   birthDate: () =>
     z.iso.date("BirthDate must be a valid date (YYYY-MM-DD)").optional(),
+  photoUrl: () => z.url("PhotoUrl must be a valid URL").optional(),
 }).pick({
   name: true,
   email: true,
@@ -18,6 +19,7 @@ export const createAuthorSchema = createInsertSchema(authorsTable, {
   bio: true,
   nationality: true,
   birthDate: true,
+  photoUrl: true,
 });
 
 export type CreateAuthorBody = z.infer<typeof createAuthorSchema>;

@@ -9,6 +9,7 @@ export const authorsTable = pgTable("authors", {
   bio: varchar({ length: 1000 }),
   nationality: varchar({ length: 100 }),
   birthDate: date(),
+  photoUrl: varchar({ length: 500 }),
   createdBy: uuid().references(() => usersTable.id),
   createdAt: timestamp().defaultNow().notNull(),
   updatedAt: timestamp()

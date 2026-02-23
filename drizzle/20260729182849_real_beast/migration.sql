@@ -1,0 +1,1 @@
+ALTER TABLE "authors" ADD COLUMN "photoUrl" varchar(500);
