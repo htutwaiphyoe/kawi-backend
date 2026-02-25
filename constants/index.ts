@@ -8,3 +8,5 @@ export const BEARER_PREFIX = "Bearer ";
 export const MINUTE = 60 * 1000;
 
 export const DAY = 24 * 60 * 60 * 1000;
+
+export const MAX_CART_QUANTITY = 99;

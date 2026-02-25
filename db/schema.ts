@@ -4,6 +4,7 @@ import { usersTable } from "@/features/users/users.model";
 import { refreshTokensTable } from "@/features/auth/auth.model";
 import { ordersTable, orderItemsTable } from "@/features/orders/orders.model";
 import { reviewsTable } from "@/features/reviews/reviews.model";
+import { cartItemsTable } from "@/features/cart/cart.model";
 
 export {
   authorsTable,
@@ -13,4 +14,5 @@ export {
   ordersTable,
   orderItemsTable,
   reviewsTable,
+  cartItemsTable,
 };
