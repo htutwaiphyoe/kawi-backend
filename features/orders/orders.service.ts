@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, gte, isNull, sql } from "drizzle-orm";
-import db from "@/db";
+import db, { type Transaction } from "@/db";
 import {
   ordersTable,
   orderItemsTable,
@@ -55,7 +55,10 @@ const enqueueOrderStatusEmail = async (order: Order) => {
     .catch((err) => logger.error({ err }, "Failed to enqueue order status email"));
 };
 
-const enqueueOrderConfirmationEmail = async (order: Order, items: OrderItem[]) => {
+export const enqueueOrderConfirmationEmail = async (
+  order: Order,
+  items: OrderItem[],
+) => {
   const email = await getUserEmail(order.userId);
   if (!email) return;
 
@@ -75,56 +78,63 @@ const enqueueOrderConfirmationEmail = async (order: Order, items: OrderItem[]) =
     );
 };
 
+export const createOrderTransaction = async (
+  transaction: Transaction,
+  params: { userId: string; body: CreateOrderBody },
+) => {
+  const { userId, body } = params;
+
+  let total = 0;
+  const lineItems: {
+    bookId: string;
+    title: string;
+    price: string;
+    quantity: number;
+  }[] = [];
+
+  for (const { bookId, quantity } of body.items) {
+    const [book] = await transaction
+      .update(booksTable)
+      .set({ stock: sql`${booksTable.stock} - ${quantity}` })
+      .where(
+        and(
+          eq(booksTable.id, bookId),
+          isNull(booksTable.deletedAt),
+          gte(booksTable.stock, quantity),
+        ),
+      )
+      .returning({ title: booksTable.title, price: booksTable.price });
+
+    if (!book) {
+      throw ApiError.badRequest(
+        `Book ${bookId} is unavailable or has insufficient stock.`,
+      );
+    }
+
+    total += Number(book.price) * quantity;
+    lineItems.push({ bookId, title: book.title, price: book.price, quantity });
+  }
+
+  const [order] = await transaction
+    .insert(ordersTable)
+    .values({ userId, total: total.toFixed(2) })
+    .returning();
+
+  const items = await transaction
+    .insert(orderItemsTable)
+    .values(lineItems.map((item) => ({ orderId: order.id, ...item })))
+    .returning();
+
+  return { order, items };
+};
+
 export const createOrder = async (params: {
   userId: string;
   body: CreateOrderBody;
 }) => {
-  const { userId, body } = params;
-
-  const { order, items } = await db.transaction(async (tx) => {
-    let total = 0;
-    const lineItems: {
-      bookId: string;
-      title: string;
-      price: string;
-      quantity: number;
-    }[] = [];
-
-    for (const { bookId, quantity } of body.items) {
-      const [book] = await tx
-        .update(booksTable)
-        .set({ stock: sql`${booksTable.stock} - ${quantity}` })
-        .where(
-          and(
-            eq(booksTable.id, bookId),
-            isNull(booksTable.deletedAt),
-            gte(booksTable.stock, quantity),
-          ),
-        )
-        .returning({ title: booksTable.title, price: booksTable.price });
-
-      if (!book) {
-        throw ApiError.badRequest(
-          `Book ${bookId} is unavailable or has insufficient stock.`,
-        );
-      }
-
-      total += Number(book.price) * quantity;
-      lineItems.push({ bookId, title: book.title, price: book.price, quantity });
-    }
-
-    const [order] = await tx
-      .insert(ordersTable)
-      .values({ userId, total: total.toFixed(2) })
-      .returning();
-
-    const items = await tx
-      .insert(orderItemsTable)
-      .values(lineItems.map((item) => ({ orderId: order.id, ...item })))
-      .returning();
-
-    return { order, items };
-  });
+  const { order, items } = await db.transaction((transaction) =>
+    createOrderTransaction(transaction, params),
+  );
 
   await enqueueOrderConfirmationEmail(order, items);
 
@@ -179,8 +189,8 @@ export const getOrder = async (id: string, user: AuthUser) => {
 };
 
 export const cancelOrder = async (id: string, user: AuthUser) => {
-  const cancelled = await db.transaction(async (tx) => {
-    const [order] = await tx
+  const cancelled = await db.transaction(async (transaction) => {
+    const [order] = await transaction
       .select()
       .from(ordersTable)
       .where(eq(ordersTable.id, id))
@@ -199,21 +209,21 @@ export const cancelOrder = async (id: string, user: AuthUser) => {
       throw ApiError.conflict("Only pending orders can be cancelled.");
     }
 
-    const items = await tx
+    const items = await transaction
       .select()
       .from(orderItemsTable)
       .where(eq(orderItemsTable.orderId, id));
 
     for (const item of items) {
       if (item.bookId) {
-        await tx
+        await transaction
           .update(booksTable)
           .set({ stock: sql`${booksTable.stock} + ${item.quantity}` })
           .where(eq(booksTable.id, item.bookId));
       }
     }
 
-    const [updated] = await tx
+    const [updated] = await transaction
       .update(ordersTable)
       .set({ status: "cancelled" })
       .where(eq(ordersTable.id, id))
