@@ -1,5 +1,5 @@
 import { and, asc, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
-import db from "@/db";
+import db, { type Transaction } from "@/db";
 import { reviewsTable, type Review } from "./reviews.model";
 import { booksTable } from "@/features/books/books.model";
 import { usersTable, type AuthUser } from "@/features/users/users.model";
@@ -12,10 +12,11 @@ import type {
 import { assertOwnership } from "@/libs/role";
 import { ApiError } from "@/libs/error";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-const recomputeBookRating = async (tx: Tx, bookId: string) => {
-  const [agg] = await tx
+const recomputeBookRating = async (
+  transaction: Transaction,
+  bookId: string,
+) => {
+  const [agg] = await transaction
     .select({
       average: sql<string>`coalesce(avg(${reviewsTable.rating}), 0)`,
       total: count(),
@@ -23,7 +24,7 @@ const recomputeBookRating = async (tx: Tx, bookId: string) => {
     .from(reviewsTable)
     .where(eq(reviewsTable.bookId, bookId));
 
-  await tx
+  await transaction
     .update(booksTable)
     .set({
       ratingsAverage: Number(agg.average).toFixed(2),
@@ -72,13 +73,13 @@ export const createReview = async (params: {
     throw ApiError.forbidden("You can only review books you have purchased.");
   }
 
-  return db.transaction(async (tx) => {
-    const [review] = await tx
+  return db.transaction(async (transaction) => {
+    const [review] = await transaction
       .insert(reviewsTable)
       .values({ bookId, userId, rating: body.rating, comment: body.comment })
       .returning();
 
-    await recomputeBookRating(tx, bookId);
+    await recomputeBookRating(transaction, bookId);
 
     return review;
   });
@@ -138,14 +139,14 @@ export const updateReview = async (params: {
   const existing = await findReviewOrThrow(params.id);
   assertOwnership(params.user, existing.userId);
 
-  return db.transaction(async (tx) => {
-    const [review] = await tx
+  return db.transaction(async (transaction) => {
+    const [review] = await transaction
       .update(reviewsTable)
       .set(params.body)
       .where(eq(reviewsTable.id, params.id))
       .returning();
 
-    await recomputeBookRating(tx, existing.bookId);
+    await recomputeBookRating(transaction, existing.bookId);
 
     return review;
   });
@@ -158,9 +159,11 @@ export const deleteReview = async (params: {
   const existing = await findReviewOrThrow(params.id);
   assertOwnership(params.user, existing.userId);
 
-  await db.transaction(async (tx) => {
-    await tx.delete(reviewsTable).where(eq(reviewsTable.id, params.id));
+  await db.transaction(async (transaction) => {
+    await transaction
+      .delete(reviewsTable)
+      .where(eq(reviewsTable.id, params.id));
 
-    await recomputeBookRating(tx, existing.bookId);
+    await recomputeBookRating(transaction, existing.bookId);
   });
 };
