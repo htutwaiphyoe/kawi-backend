@@ -17,7 +17,7 @@ const next = () => ++seq;
 
 export const truncateAll = async () => {
   await db.execute(
-    sql`TRUNCATE TABLE order_items, orders, refresh_tokens, books, authors, users RESTART IDENTITY CASCADE`,
+    sql`TRUNCATE TABLE cart_items, order_items, orders, refresh_tokens, books, authors, users RESTART IDENTITY CASCADE`,
   );
 };
 
