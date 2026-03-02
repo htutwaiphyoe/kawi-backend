@@ -44,6 +44,7 @@ services:
     environment:
       DATABASE_URL: postgres://kawi:kawi@postgres:5432/kawi
       REDIS_URL: redis://redis:6379
+      NODE_ENV: development
     depends_on:
       postgres:
         condition: service_healthy
