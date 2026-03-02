@@ -180,6 +180,7 @@ export const checkout = async (params: {
     const created = await createOrderTransaction(transaction, {
       userId,
       body: {
+        address: body.address,
         items: lines.map((line) => ({
           bookId: line.bookId,
           quantity: line.quantity,

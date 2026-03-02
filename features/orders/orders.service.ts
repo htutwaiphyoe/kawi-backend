@@ -1,4 +1,14 @@
-import { and, asc, count, desc, eq, gte, isNull, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import db, { type Transaction } from "@/db";
 import {
   ordersTable,
@@ -19,6 +29,31 @@ import {
 } from "@/libs/queue";
 import { logger } from "@/libs/logger";
 import { ApiError } from "@/libs/error";
+
+const orderColumns = {
+  id: ordersTable.id,
+  userId: ordersTable.userId,
+  status: ordersTable.status,
+  total: ordersTable.total,
+  shippingAddress: ordersTable.shippingAddress,
+  createdAt: ordersTable.createdAt,
+  updatedAt: ordersTable.updatedAt,
+  customer: {
+    id: usersTable.id,
+    name: usersTable.name,
+    email: usersTable.email,
+  },
+};
+
+const itemColumns = {
+  id: orderItemsTable.id,
+  orderId: orderItemsTable.orderId,
+  bookId: orderItemsTable.bookId,
+  title: orderItemsTable.title,
+  price: orderItemsTable.price,
+  quantity: orderItemsTable.quantity,
+  coverUrl: booksTable.coverUrl,
+};
 
 const ORDER_SORT = {
   createdAt: ordersTable.createdAt,
@@ -117,7 +152,11 @@ export const createOrderTransaction = async (
 
   const [order] = await transaction
     .insert(ordersTable)
-    .values({ userId, total: total.toFixed(2) })
+    .values({
+      userId,
+      total: total.toFixed(2),
+      shippingAddress: body.address,
+    })
     .returning();
 
   const items = await transaction
@@ -144,8 +183,10 @@ export const createOrder = async (params: {
 export const getOrders = async (user: AuthUser, query: OrdersQuery) => {
   const offset = (query.page - 1) * query.limit;
 
-  const where =
-    user.role === "admin" ? undefined : eq(ordersTable.userId, user.id);
+  const where = and(
+    user.role === "admin" ? undefined : eq(ordersTable.userId, user.id),
+    query.status ? eq(ordersTable.status, query.status) : undefined,
+  );
 
   const orderBy = (query.orderBy === "asc" ? asc : desc)(
     ORDER_SORT[query.sortBy],
@@ -153,8 +194,9 @@ export const getOrders = async (user: AuthUser, query: OrdersQuery) => {
 
   const [orders, [{ total }]] = await Promise.all([
     db
-      .select()
+      .select(orderColumns)
       .from(ordersTable)
+      .innerJoin(usersTable, eq(usersTable.id, ordersTable.userId))
       .where(where)
       .orderBy(orderBy)
       .limit(query.limit)
@@ -162,13 +204,43 @@ export const getOrders = async (user: AuthUser, query: OrdersQuery) => {
     db.select({ total: count() }).from(ordersTable).where(where),
   ]);
 
-  return { orders, total };
+  if (orders.length === 0) {
+    return { orders: [], total };
+  }
+
+  const items = await db
+    .select(itemColumns)
+    .from(orderItemsTable)
+    .leftJoin(booksTable, eq(booksTable.id, orderItemsTable.bookId))
+    .where(
+      inArray(
+        orderItemsTable.orderId,
+        orders.map((order) => order.id),
+      ),
+    );
+
+  const grouped = new Map<string, typeof items>();
+
+  for (const item of items) {
+    const existing = grouped.get(item.orderId) ?? [];
+    existing.push(item);
+    grouped.set(item.orderId, existing);
+  }
+
+  return {
+    orders: orders.map((order) => ({
+      ...order,
+      items: grouped.get(order.id) ?? [],
+    })),
+    total,
+  };
 };
 
 export const getOrder = async (id: string, user: AuthUser) => {
   const [order] = await db
-    .select()
+    .select(orderColumns)
     .from(ordersTable)
+    .innerJoin(usersTable, eq(usersTable.id, ordersTable.userId))
     .where(eq(ordersTable.id, id))
     .limit(1);
 
@@ -181,8 +253,9 @@ export const getOrder = async (id: string, user: AuthUser) => {
   }
 
   const items = await db
-    .select()
+    .select(itemColumns)
     .from(orderItemsTable)
+    .leftJoin(booksTable, eq(booksTable.id, orderItemsTable.bookId))
     .where(eq(orderItemsTable.orderId, id));
 
   return { ...order, items };

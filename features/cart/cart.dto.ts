@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_CART_QUANTITY } from "@/constants";
+import { shippingAddressSchema } from "@/features/orders/orders.dto";
 
 const quantitySchema = z
   .number("Quantity is required and must be a number")
@@ -21,6 +22,7 @@ export const updateCartItemSchema = z.object({
 export type UpdateCartItemBody = z.infer<typeof updateCartItemSchema>;
 
 export const checkoutSchema = z.object({
+  address: shippingAddressSchema,
   itemIds: z
     .array(z.uuid("ItemIds must contain valid UUIDs"))
     .min(1, "ItemIds must contain at least one item")

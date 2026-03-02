@@ -1,6 +1,7 @@
 import {
   index,
   integer,
+  jsonb,
   numeric,
   pgEnum,
   pgTable,
@@ -20,6 +21,16 @@ export const orderStatusEnum = pgEnum("order_status", [
 
 export type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
 
+export type ShippingAddress = {
+  recipient: string;
+  phone: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  postalCode?: string;
+  country: string;
+};
+
 export const ordersTable = pgTable(
   "orders",
   {
@@ -29,6 +40,7 @@ export const ordersTable = pgTable(
       .references(() => usersTable.id),
     status: orderStatusEnum().notNull().default("pending"),
     total: numeric({ precision: 10, scale: 2 }).notNull(),
+    shippingAddress: jsonb().$type<ShippingAddress>(),
     createdAt: timestamp().defaultNow().notNull(),
     updatedAt: timestamp()
       .defaultNow()

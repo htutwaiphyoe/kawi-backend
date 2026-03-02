@@ -1,7 +1,40 @@
 import { z } from "zod";
 import { orderStatusEnum } from "./orders.model";
 
+export const shippingAddressSchema = z.object({
+  recipient: z
+    .string("Recipient is required")
+    .trim()
+    .min(1, "Recipient is required")
+    .max(255, "Recipient must be at most 255 characters"),
+  phone: z
+    .string("Phone is required")
+    .trim()
+    .min(1, "Phone is required")
+    .max(30, "Phone must be at most 30 characters"),
+  line1: z
+    .string("Address is required")
+    .trim()
+    .min(1, "Address is required")
+    .max(255, "Address must be at most 255 characters"),
+  line2: z.string().trim().max(255).optional(),
+  city: z
+    .string("City is required")
+    .trim()
+    .min(1, "City is required")
+    .max(120, "City must be at most 120 characters"),
+  postalCode: z.string().trim().max(20).optional(),
+  country: z
+    .string("Country is required")
+    .trim()
+    .min(1, "Country is required")
+    .max(120, "Country must be at most 120 characters"),
+});
+
+export type ShippingAddressBody = z.infer<typeof shippingAddressSchema>;
+
 export const createOrderSchema = z.object({
+  address: shippingAddressSchema,
   items: z
     .array(
       z.object({
@@ -24,6 +57,7 @@ export const updateOrderStatusSchema = z.object({
 export type UpdateOrderStatusBody = z.infer<typeof updateOrderStatusSchema>;
 
 export const ordersQuerySchema = z.object({
+  status: z.enum(orderStatusEnum.enumValues).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
   sortBy: z.enum(["createdAt", "total", "status"]).default("createdAt"),
