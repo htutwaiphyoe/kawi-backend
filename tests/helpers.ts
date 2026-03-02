@@ -93,3 +93,12 @@ export const seedOrder = async (userId: string, bookId: string) => {
 
   return order;
 };
+
+export const ADDRESS = {
+  recipient: "Test Recipient",
+  phone: "+95 9 123 456 789",
+  line1: "12 Pyay Road",
+  city: "Yangon",
+  postalCode: "11201",
+  country: "Myanmar",
+};

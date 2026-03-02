@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { eq } from "drizzle-orm";
 import db from "@/db";
 import { booksTable } from "@/features/books/books.model";
-import { api, truncateAll, createUser, seedBook } from "./helpers";
+import { ADDRESS, api, truncateAll, createUser, seedBook } from "./helpers";
 
 beforeEach(truncateAll);
 
@@ -25,7 +25,7 @@ describe("POST /orders", () => {
     const res = await api
       .post("/api/v1/orders")
       .set(bearer(token))
-      .send({ items: [{ bookId: book.id, quantity: 2 }] });
+      .send({ address: ADDRESS, items: [{ bookId: book.id, quantity: 2 }] });
 
     expect(res.status).toBe(201);
     expect(res.body.order.total).toBe("19.98");
@@ -43,8 +43,7 @@ describe("POST /orders", () => {
     const res = await api
       .post("/api/v1/orders")
       .set(bearer(token))
-      .send({
-        items: [
+      .send({ address: ADDRESS, items: [
           { bookId: ok.id, quantity: 1 },
           { bookId: short.id, quantity: 2 },
         ],
@@ -56,9 +55,55 @@ describe("POST /orders", () => {
     expect(await stockOf(short.id)).toBe(1);
   });
 
+  it("snapshots the shipping address onto the order", async () => {
+    const { token } = await createUser();
+    const book = await seedBook({ stock: 3 });
+
+    const created = await api
+      .post("/api/v1/orders")
+      .set(bearer(token))
+      .send({ address: ADDRESS, items: [{ bookId: book.id, quantity: 1 }] });
+
+    expect(created.status).toBe(201);
+    expect(created.body.order.shippingAddress).toEqual(ADDRESS);
+
+    const fetched = await api
+      .get(`/api/v1/orders/${created.body.order.id}`)
+      .set(bearer(token));
+
+    expect(fetched.body.order.shippingAddress).toEqual(ADDRESS);
+  });
+
+  it("rejects an order with no shipping address (400)", async () => {
+    const { token } = await createUser();
+    const book = await seedBook({ stock: 3 });
+
+    const res = await api
+      .post("/api/v1/orders")
+      .set(bearer(token))
+      .send({ items: [{ bookId: book.id, quantity: 1 }] });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects an incomplete shipping address (400)", async () => {
+    const { token } = await createUser();
+    const book = await seedBook({ stock: 3 });
+
+    const res = await api
+      .post("/api/v1/orders")
+      .set(bearer(token))
+      .send({
+        address: { ...ADDRESS, city: "" },
+        items: [{ bookId: book.id, quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it("rejects an empty item list (400)", async () => {
     const { token } = await createUser();
-    const res = await api.post("/api/v1/orders").set(bearer(token)).send({ items: [] });
+    const res = await api.post("/api/v1/orders").set(bearer(token)).send({ address: ADDRESS, items: [] });
     expect(res.status).toBe(400);
   });
 });
@@ -72,7 +117,7 @@ describe("GET /orders/:id", () => {
     const created = await api
       .post("/api/v1/orders")
       .set(bearer(owner.token))
-      .send({ items: [{ bookId: book.id, quantity: 1 }] });
+      .send({ address: ADDRESS, items: [{ bookId: book.id, quantity: 1 }] });
     const orderId = created.body.order.id;
 
     const asOwner = await api.get(`/api/v1/orders/${orderId}`).set(bearer(owner.token));
@@ -91,7 +136,7 @@ describe("PATCH /orders/:id/cancel", () => {
     const created = await api
       .post("/api/v1/orders")
       .set(bearer(token))
-      .send({ items: [{ bookId: book.id, quantity: 2 }] });
+      .send({ address: ADDRESS, items: [{ bookId: book.id, quantity: 2 }] });
     const orderId = created.body.order.id;
     expect(await stockOf(book.id)).toBe(3);
 

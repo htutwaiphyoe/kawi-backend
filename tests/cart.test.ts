@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import db from "@/db";
 import { booksTable } from "@/features/books/books.model";
 import { ordersTable } from "@/features/orders/orders.model";
-import { api, truncateAll, createUser, seedBook } from "./helpers";
+import { ADDRESS, api, truncateAll, createUser, seedBook } from "./helpers";
 
 beforeEach(truncateAll);
 
@@ -337,7 +337,7 @@ describe("POST /cart/checkout", () => {
     const book = await seedBook({ price: "9.99", stock: 5 });
 
     await addItem(token, book.id, 2);
-    const res = await api.post("/api/v1/cart/checkout").set(bearer(token));
+    const res = await api.post("/api/v1/cart/checkout").set(bearer(token)).send({ address: ADDRESS });
 
     expect(res.status).toBe(201);
     expect(res.body.order.status).toBe("pending");
@@ -354,7 +354,7 @@ describe("POST /cart/checkout", () => {
   it("rejects an empty cart", async () => {
     const { token } = await createUser();
 
-    const res = await api.post("/api/v1/cart/checkout").set(bearer(token));
+    const res = await api.post("/api/v1/cart/checkout").set(bearer(token)).send({ address: ADDRESS });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Cart is empty.");
@@ -368,7 +368,7 @@ describe("POST /cart/checkout", () => {
     await addItem(token, plenty.id, 1);
     await addItem(token, short.id, 2);
 
-    const res = await api.post("/api/v1/cart/checkout").set(bearer(token));
+    const res = await api.post("/api/v1/cart/checkout").set(bearer(token)).send({ address: ADDRESS });
 
     expect(res.status).toBe(400);
     expect(await orderCount()).toBe(0);
@@ -393,7 +393,7 @@ describe("POST /cart/checkout", () => {
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(token))
-      .send({ itemIds: [await itemIdFor(token, picked.id), await itemIdFor(token, alsoPicked.id)] });
+      .send({ address: ADDRESS, itemIds: [await itemIdFor(token, picked.id), await itemIdFor(token, alsoPicked.id)] });
 
     expect(res.status).toBe(201);
     expect(res.body.order.items).toHaveLength(2);
@@ -421,13 +421,13 @@ describe("POST /cart/checkout", () => {
       .set({ stock: 0 })
       .where(eq(booksTable.id, sold.id));
 
-    const blocked = await api.post("/api/v1/cart/checkout").set(bearer(token));
+    const blocked = await api.post("/api/v1/cart/checkout").set(bearer(token)).send({ address: ADDRESS });
     expect(blocked.status).toBe(400);
 
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(token))
-      .send({ itemIds: [await itemIdFor(token, fine.id)] });
+      .send({ address: ADDRESS, itemIds: [await itemIdFor(token, fine.id)] });
 
     expect(res.status).toBe(201);
     expect(res.body.order.items).toHaveLength(1);
@@ -447,7 +447,7 @@ describe("POST /cart/checkout", () => {
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(token))
-      .send({ itemIds: [await itemIdFor(token, inCart.id), "00000000-0000-0000-0000-000000000000"] });
+      .send({ address: ADDRESS, itemIds: [await itemIdFor(token, inCart.id), "00000000-0000-0000-0000-000000000000"] });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toBe("Some items are not in your cart.");
@@ -464,7 +464,7 @@ describe("POST /cart/checkout", () => {
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(token))
-      .send({ itemIds: [] });
+      .send({ address: ADDRESS, itemIds: [] });
 
     expect(res.status).toBe(400);
   });
@@ -478,7 +478,7 @@ describe("POST /cart/checkout", () => {
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(token))
-      .send({ itemIds: [await itemIdFor(token, book.id), await itemIdFor(token, book.id)] });
+      .send({ address: ADDRESS, itemIds: [await itemIdFor(token, book.id), await itemIdFor(token, book.id)] });
 
     expect(res.status).toBe(201);
     expect(res.body.order.items).toHaveLength(1);
@@ -496,7 +496,7 @@ describe("POST /cart/checkout", () => {
     const res = await api
       .post("/api/v1/cart/checkout")
       .set(bearer(other.token))
-      .send({ itemIds: [await itemIdFor(owner.token, book.id)] });
+      .send({ address: ADDRESS, itemIds: [await itemIdFor(owner.token, book.id)] });
 
     expect(res.status).toBe(400);
     expect(await orderCount()).toBe(0);
@@ -508,7 +508,7 @@ describe("POST /cart/checkout", () => {
     const book = await seedBook({ stock: 5 });
 
     await addItem(token, book.id, 1);
-    await api.post("/api/v1/cart/checkout").set(bearer(token));
+    await api.post("/api/v1/cart/checkout").set(bearer(token)).send({ address: ADDRESS });
 
     const res = await api
       .post(`/api/v1/books/${book.id}/reviews`)
