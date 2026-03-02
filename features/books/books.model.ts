@@ -49,6 +49,8 @@ export const bookSortColumns = {
   price: booksTable.price,
   publishedDate: booksTable.publishedDate,
   stock: booksTable.stock,
+  ratingsAverage: booksTable.ratingsAverage,
+  ratingsCount: booksTable.ratingsCount,
   createdAt: booksTable.createdAt,
 };
 
