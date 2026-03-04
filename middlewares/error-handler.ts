@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
+import { ZodError } from "zod";
 import { ApiError, getPgConstraint, getPgErrorCode } from "@/libs/error";
 
 export const notFoundHandler = (req: Request, res: Response) => {
@@ -31,6 +32,17 @@ export const errorHandler = (
     return res.status(err.statusCode).json({
       status: "error",
       message: err.message,
+    });
+  }
+
+  if (err instanceof ZodError) {
+    return res.status(400).json({
+      status: "error",
+      message: "Invalid request data.",
+      errors: err.issues.map((issue) => ({
+        path: issue.path.join("."),
+        message: issue.message,
+      })),
     });
   }
 

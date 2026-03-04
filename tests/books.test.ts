@@ -36,6 +36,14 @@ describe("GET /books", () => {
     const byId = await api.get(`/api/v1/books/${book.id}`);
     expect(byId.status).toBe(404);
   });
+
+  it("rejects an invalid query with 400, not 500", async () => {
+    for (const query of ["page=abc", "limit=999", "sortBy=bogus"]) {
+      const res = await api.get(`/api/v1/books?${query}`);
+      expect(res.status).toBe(400);
+      expect(res.body.message).toBe("Invalid request data.");
+    }
+  });
 });
 
 describe("POST /books", () => {
