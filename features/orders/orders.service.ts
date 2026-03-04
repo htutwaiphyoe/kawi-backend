@@ -7,6 +7,7 @@ import {
   gte,
   inArray,
   isNull,
+  lt,
   sql,
 } from "drizzle-orm";
 import db, { type Transaction } from "@/db";
@@ -59,6 +60,17 @@ const ORDER_SORT = {
   createdAt: ordersTable.createdAt,
   total: ordersTable.total,
   status: ordersTable.status,
+};
+
+const localDayStart = (day: string, tzOffset: number) =>
+  new Date(new Date(`${day}T00:00:00.000Z`).getTime() + tzOffset * 60_000);
+
+const localDayEnd = (day: string, tzOffset: number) => {
+  const start = localDayStart(day, tzOffset);
+
+  start.setUTCDate(start.getUTCDate() + 1);
+
+  return start;
 };
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -186,6 +198,12 @@ export const getOrders = async (user: AuthUser, query: OrdersQuery) => {
   const where = and(
     user.role === "admin" ? undefined : eq(ordersTable.userId, user.id),
     query.status ? eq(ordersTable.status, query.status) : undefined,
+    query.from
+      ? gte(ordersTable.createdAt, localDayStart(query.from, query.tzOffset))
+      : undefined,
+    query.to
+      ? lt(ordersTable.createdAt, localDayEnd(query.to, query.tzOffset))
+      : undefined,
   );
 
   const orderBy = (query.orderBy === "asc" ? asc : desc)(

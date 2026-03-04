@@ -56,12 +56,40 @@ export const updateOrderStatusSchema = z.object({
 
 export type UpdateOrderStatusBody = z.infer<typeof updateOrderStatusSchema>;
 
-export const ordersQuerySchema = z.object({
-  status: z.enum(orderStatusEnum.enumValues).optional(),
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  sortBy: z.enum(["createdAt", "total", "status"]).default("createdAt"),
-  orderBy: z.enum(["asc", "desc"]).default("desc"),
-});
+const toUtcMidnight = (value: string) => new Date(`${value}T00:00:00.000Z`);
+
+const isCalendarDate = (value: string) => {
+  const date = toUtcMidnight(value);
+
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().startsWith(`${value}T`)
+  );
+};
+
+const dayFilterSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be a date in YYYY-MM-DD format")
+  .refine(isCalendarDate, "Must be a real calendar date");
+
+export const ordersQuerySchema = z
+  .object({
+    status: z.enum(orderStatusEnum.enumValues).optional(),
+    from: dayFilterSchema.optional(),
+    to: dayFilterSchema.optional(),
+    tzOffset: z.coerce
+      .number("TzOffset must be a number")
+      .int("TzOffset must be a whole number of minutes")
+      .min(-840, "TzOffset must be at least -840")
+      .max(840, "TzOffset must be at most 840")
+      .default(0),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    sortBy: z.enum(["createdAt", "total", "status"]).default("createdAt"),
+    orderBy: z.enum(["asc", "desc"]).default("desc"),
+  })
+  .refine((query) => !query.from || !query.to || query.from <= query.to, {
+    path: ["from"],
+    message: "From must be on or before to",
+  });
 
 export type OrdersQuery = z.infer<typeof ordersQuerySchema>;
