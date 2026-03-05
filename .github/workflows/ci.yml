@@ -1,4 +1,4 @@
-name: CI/CD
+name: CI
 
 on:
   push:
@@ -10,24 +10,11 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-master
-  cancel-in-progress: false
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-
-env:
-  AWS_REGION: ap-southeast-1
-  AWS_ROLE: arn:aws:iam::567343232144:role/kawi-github-actions
-  ECR_REGISTRY: 567343232144.dkr.ecr.ap-southeast-1.amazonaws.com
-  ECR_REPOSITORY: kawi/backend
-  ECS_CLUSTER: kawi
-  ECS_SERVICE: kawi-backend
-  TASK_FAMILY: kawi-staging
-  MIGRATE_FAMILY: kawi-migrate
-  SUBNET: subnet-0ca3b1b8376085fe0
-  SECURITY_GROUP: sg-07fc2b29dcf6302a5
-  LOG_GROUP: /ecs/kawi
 
 jobs:
   test:
@@ -71,159 +58,3 @@ jobs:
         run: bun run test
         env:
           JWT_SECRET: ci-only-secret-at-least-32-characters-long
-
-  build:
-    needs: test
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image: ${{ steps.meta.outputs.image }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - uses: aws-actions/amazon-ecr-login@v2
-
-      # x86 runner building an arm64 image, so cross-build via emulation
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
-
-      - uses: docker/setup-buildx-action@v3
-
-      - id: meta
-        run: echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" >> "$GITHUB_OUTPUT"
-
-      - name: Build and push
-        run: |
-          docker buildx build \
-            --platform linux/arm64 \
-            --provenance=false --sbom=false \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}" \
-            -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" \
-            --push .
-
-  migrate:
-    needs: build
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Register migrate task definition with new image
-        id: reg
-        run: |
-          aws ecs describe-task-definition --task-definition "$MIGRATE_FAMILY" \
-            --query taskDefinition > td.json
-
-          jq --arg IMG "${{ needs.build.outputs.image }}" '
-            .containerDefinitions[0].image = $IMG
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                  .compatibilities, .registeredAt, .registeredBy)
-          ' td.json > new-td.json
-
-          REV=$(aws ecs register-task-definition --cli-input-json file://new-td.json \
-                  --query taskDefinition.revision --output text)
-          echo "rev=$REV" >> "$GITHUB_OUTPUT"
-
-      - name: Run migrations as a one-off Fargate task
-        run: |
-          TASK=$(aws ecs run-task \
-            --cluster "$ECS_CLUSTER" \
-            --launch-type FARGATE \
-            --task-definition "$MIGRATE_FAMILY:${{ steps.reg.outputs.rev }}" \
-            --network-configuration "awsvpcConfiguration={subnets=[$SUBNET],securityGroups=[$SECURITY_GROUP],assignPublicIp=ENABLED}" \
-            --query 'tasks[0].taskArn' --output text)
-
-          echo "task: $TASK"
-          aws ecs wait tasks-stopped --cluster "$ECS_CLUSTER" --tasks "$TASK"
-
-          EXIT=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK" \
-                   --query 'tasks[0].containers[0].exitCode' --output text)
-          REASON=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK" \
-                   --query 'tasks[0].stoppedReason' --output text)
-
-          echo "--- migrate logs ---"
-          aws logs get-log-events \
-            --log-group-name "$LOG_GROUP" \
-            --log-stream-name "migrate/migrate/$(basename "$TASK")" \
-            --start-from-head --query 'events[].message' --output text || true
-
-          if [ "$EXIT" != "0" ]; then
-            echo "::error::migration failed (exitCode=$EXIT, reason=$REASON)"
-            exit 1
-          fi
-
-  deploy:
-    needs: [build, migrate]
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Register service task definition with new image
-        id: reg
-        run: |
-          aws ecs describe-task-definition --task-definition "$TASK_FAMILY" \
-            --query taskDefinition > td.json
-
-          jq --arg IMG "${{ needs.build.outputs.image }}" '
-            .containerDefinitions |= map(
-              if .name == "api" or .name == "worker" then .image = $IMG else . end
-            )
-            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes,
-                  .compatibilities, .registeredAt, .registeredBy)
-          ' td.json > new-td.json
-
-          REV=$(aws ecs register-task-definition --cli-input-json file://new-td.json \
-                  --query taskDefinition.revision --output text)
-          echo "rev=$REV" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy and wait for stability
-        run: |
-          aws ecs update-service \
-            --cluster "$ECS_CLUSTER" --service "$ECS_SERVICE" \
-            --task-definition "$TASK_FAMILY:${{ steps.reg.outputs.rev }}" \
-            --query 'service.{service:serviceName,taskdef:taskDefinition}' --output json
-
-          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_SERVICE"
-          echo "deployed $TASK_FAMILY:${{ steps.reg.outputs.rev }}"
-
-      - name: Smoke test
-        run: |
-          TASK=$(aws ecs list-tasks --cluster "$ECS_CLUSTER" --service-name "$ECS_SERVICE" \
-                   --query 'taskArns[0]' --output text)
-          ENI=$(aws ecs describe-tasks --cluster "$ECS_CLUSTER" --tasks "$TASK" \
-                  --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' --output text)
-          IP=$(aws ec2 describe-network-interfaces --network-interface-ids "$ENI" \
-                 --query 'NetworkInterfaces[0].Association.PublicIp' --output text)
-
-          for i in $(seq 1 10); do
-            if curl -fsS -m 10 "http://$IP:8000/health" > /dev/null; then
-              echo "health ok at http://$IP:8000"
-              curl -fsS -m 10 "http://$IP:8000/api/v1/books" > /dev/null \
-                && echo "books ok (schema present)" && exit 0
-            fi
-            sleep 6
-          done
-          echo "::error::smoke test failed"
-          exit 1

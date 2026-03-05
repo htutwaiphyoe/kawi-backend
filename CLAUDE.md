@@ -54,7 +54,7 @@ Full API implemented and tested: **books, authors, users, auth, orders, reviews*
 ## Next up (roadmap)
 
 1. **Frontend:** separate `kawi-web` project.
-2. **Deploy (AWS):** build image `--platform linux/amd64`, push to **ECR** (repos `kawi-api`, later `kawi-web`), run on **ECS Fargate** (api + worker services), **RDS** Postgres, **ElastiCache** Redis, **Secrets Manager** for env, **SES** for email.
+2. **Deploy:** provider still undecided — build the container image, run the api and worker as separate services against managed Postgres and Redis, env from the platform's secret store, SMTP for email.
 3. **CI** (GitHub Actions: typecheck + tests with pg/redis services), **OpenAPI/Swagger** docs, **seed script**.
 
 ## Commit style
