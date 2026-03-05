@@ -5,6 +5,7 @@ import { booksTable } from "@/features/books/books.model";
 import { usersTable, type AuthUser } from "@/features/users/users.model";
 import { ordersTable, orderItemsTable } from "@/features/orders/orders.model";
 import type {
+  AllReviewsQuery,
   CreateReviewBody,
   UpdateReviewBody,
   ReviewsQuery,
@@ -166,4 +167,76 @@ export const deleteReview = async (params: {
 
     await recomputeBookRating(transaction, existing.bookId);
   });
+};
+
+export const getReviewEligibility = async (userId: string, bookId: string) => {
+  if (!(await findActiveBook(bookId))) {
+    throw ApiError.notFound("Book is not found.");
+  }
+
+  const [[purchased], [mine]] = await Promise.all([
+    db
+      .select({ id: orderItemsTable.id })
+      .from(orderItemsTable)
+      .innerJoin(ordersTable, eq(orderItemsTable.orderId, ordersTable.id))
+      .where(
+        and(
+          eq(orderItemsTable.bookId, bookId),
+          eq(ordersTable.userId, userId),
+          ne(ordersTable.status, "cancelled"),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: reviewsTable.id })
+      .from(reviewsTable)
+      .where(and(eq(reviewsTable.bookId, bookId), eq(reviewsTable.userId, userId)))
+      .limit(1),
+  ]);
+
+  return {
+    hasPurchased: Boolean(purchased),
+    reviewId: mine?.id ?? null,
+    canReview: Boolean(purchased) && !mine,
+  };
+};
+
+export const getAllReviews = async (query: AllReviewsQuery) => {
+  const offset = (query.page - 1) * query.limit;
+
+  const where = query.rating ? eq(reviewsTable.rating, query.rating) : undefined;
+
+  const sortColumn =
+    query.sortBy === "rating" ? reviewsTable.rating : reviewsTable.createdAt;
+  const orderBy = (query.orderBy === "asc" ? asc : desc)(sortColumn);
+
+  const [reviews, [{ total }]] = await Promise.all([
+    db
+      .select({
+        id: reviewsTable.id,
+        rating: reviewsTable.rating,
+        comment: reviewsTable.comment,
+        createdAt: reviewsTable.createdAt,
+        book: {
+          id: booksTable.id,
+          title: booksTable.title,
+          coverUrl: booksTable.coverUrl,
+        },
+        user: {
+          id: usersTable.id,
+          name: usersTable.name,
+          email: usersTable.email,
+        },
+      })
+      .from(reviewsTable)
+      .innerJoin(booksTable, eq(booksTable.id, reviewsTable.bookId))
+      .innerJoin(usersTable, eq(usersTable.id, reviewsTable.userId))
+      .where(where)
+      .orderBy(orderBy)
+      .limit(query.limit)
+      .offset(offset),
+    db.select({ total: count() }).from(reviewsTable).where(where),
+  ]);
+
+  return { reviews, total };
 };

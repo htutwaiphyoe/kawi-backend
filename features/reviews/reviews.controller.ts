@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import type { Uuid } from "@/libs/validators";
 import { getCurrentUser } from "@/libs/user";
 import {
+  allReviewsQuerySchema,
   reviewsQuerySchema,
   type CreateReviewBody,
   type UpdateReviewBody,
@@ -80,5 +81,36 @@ export const deleteReview = async (
 
   res.status(200).json({
     status: "success",
+  });
+};
+
+export const getReviewEligibility = async (
+  req: Request<{ bookId: Uuid }>,
+  res: Response,
+) => {
+  const currentUser = getCurrentUser(req);
+
+  const eligibility = await reviewsService.getReviewEligibility(
+    currentUser.id,
+    req.params.bookId,
+  );
+
+  res.status(200).json({ status: "success", eligibility });
+};
+
+export const getAllReviews = async (req: Request, res: Response) => {
+  const query = allReviewsQuerySchema.parse(req.query);
+
+  const { reviews, total } = await reviewsService.getAllReviews(query);
+
+  res.status(200).json({
+    status: "success",
+    pagination: {
+      page: query.page,
+      limit: query.limit,
+      total,
+      totalPages: Math.ceil(total / query.limit),
+    },
+    reviews,
   });
 };

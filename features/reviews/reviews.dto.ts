@@ -30,3 +30,14 @@ export const reviewsQuerySchema = z.object({
 });
 
 export type ReviewsQuery = z.infer<typeof reviewsQuerySchema>;
+
+export const allReviewsQuerySchema = reviewsQuerySchema.extend({
+  rating: z.coerce
+    .number("Rating must be a number")
+    .int("Rating must be a whole number")
+    .min(1, "Rating must be between 1 and 5")
+    .max(5, "Rating must be between 1 and 5")
+    .optional(),
+});
+
+export type AllReviewsQuery = z.infer<typeof allReviewsQuerySchema>;
