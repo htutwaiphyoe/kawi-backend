@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, eq, gte, isNotNull, isNull } from "drizzle-orm";
 import db from "@/db";
 import {
   usersTable,
@@ -128,4 +128,21 @@ export const updateUserRole = async (params: {
     throw ApiError.notFound("Active user is not found.");
   }
   return user;
+};
+
+export const getUsersStats = async (since: Date) => {
+  const [[all], [recent]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(usersTable)
+      .where(isNull(usersTable.deactivatedAt)),
+    db
+      .select({ value: count() })
+      .from(usersTable)
+      .where(
+        and(isNull(usersTable.deactivatedAt), gte(usersTable.createdAt, since)),
+      ),
+  ]);
+
+  return { total: all.value, joinedSince: recent.value };
 };

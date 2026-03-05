@@ -14,6 +14,7 @@ import authRouter from "@/features/auth/auth.route";
 import userRouter from "@/features/users/users.route";
 import orderRouter from "@/features/orders/orders.route";
 import cartRouter from "@/features/cart/cart.route";
+import reportRouter from "@/features/report/report.route";
 import {
   bookReviewsRouter,
   reviewsRouter,
@@ -56,6 +57,8 @@ app.use("/api/v1/users", userRouter);
 app.use("/api/v1/orders", orderRouter);
 
 app.use("/api/v1/cart", cartRouter);
+
+app.use("/api/v1/report", reportRouter);
 
 app.use("/api/v1/authors/:id/books", authorBooksRouter);
 

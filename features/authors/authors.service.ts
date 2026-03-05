@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, isNull } from "drizzle-orm";
 import db from "@/db";
 import { authorsTable, type Author } from "./authors.model";
 import type {
@@ -101,4 +101,21 @@ export const deleteAuthor = async (params: {
     .update(authorsTable)
     .set({ deletedAt: new Date() })
     .where(eq(authorsTable.id, params.id));
+};
+
+export const getAuthorsStats = async (since: Date) => {
+  const [[all], [recent]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(authorsTable)
+      .where(isNull(authorsTable.deletedAt)),
+    db
+      .select({ value: count() })
+      .from(authorsTable)
+      .where(
+        and(isNull(authorsTable.deletedAt), gte(authorsTable.createdAt, since)),
+      ),
+  ]);
+
+  return { total: all.value, addedSince: recent.value };
 };

@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, ilike, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, isNull } from "drizzle-orm";
 import db from "@/db";
 import { booksTable, bookSortColumns, type Book } from "./books.model";
 import type { CreateBookBody, UpdateBookBody, BooksQuery } from "./books.dto";
@@ -131,4 +131,23 @@ export const deleteBook = async (params: {
     .update(booksTable)
     .set({ deletedAt: new Date() })
     .where(eq(booksTable.id, params.id));
+};
+
+export const getBooksStats = async (since: Date) => {
+  const [[all], [recent], [outOfStock]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(booksTable)
+      .where(isNull(booksTable.deletedAt)),
+    db
+      .select({ value: count() })
+      .from(booksTable)
+      .where(and(isNull(booksTable.deletedAt), gte(booksTable.createdAt, since))),
+    db
+      .select({ value: count() })
+      .from(booksTable)
+      .where(and(isNull(booksTable.deletedAt), eq(booksTable.stock, 0))),
+  ]);
+
+  return { total: all.value, addedSince: recent.value, outOfStock: outOfStock.value };
 };

@@ -8,12 +8,14 @@ import {
   inArray,
   isNull,
   lt,
+  type SQL,
   sql,
 } from "drizzle-orm";
 import db, { type Transaction } from "@/db";
 import {
   ordersTable,
   orderItemsTable,
+  orderStatusEnum,
   type Order,
   type OrderItem,
   type OrderStatus,
@@ -30,6 +32,7 @@ import {
 } from "@/libs/queue";
 import { logger } from "@/libs/logger";
 import { ApiError } from "@/libs/error";
+import { localDayEnd, localDayStart } from "@/utils/day";
 
 const orderColumns = {
   id: ordersTable.id,
@@ -60,17 +63,6 @@ const ORDER_SORT = {
   createdAt: ordersTable.createdAt,
   total: ordersTable.total,
   status: ordersTable.status,
-};
-
-const localDayStart = (day: string, tzOffset: number) =>
-  new Date(new Date(`${day}T00:00:00.000Z`).getTime() + tzOffset * 60_000);
-
-const localDayEnd = (day: string, tzOffset: number) => {
-  const start = localDayStart(day, tzOffset);
-
-  start.setUTCDate(start.getUTCDate() + 1);
-
-  return start;
 };
 
 const STATUS_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
@@ -354,4 +346,94 @@ export const updateOrderStatus = async (id: string, status: OrderStatus) => {
   await enqueueOrderStatusEmail(updated);
 
   return updated;
+};
+
+const REVENUE_STATUSES: OrderStatus[] = ["paid", "shipped"];
+
+const sumTotals = (where: SQL | undefined) =>
+  db
+    .select({
+      orders: count(),
+      revenue: sql<string>`coalesce(sum(${ordersTable.total}), 0)::text`,
+    })
+    .from(ordersTable)
+    .where(where);
+
+export const getOrdersStats = async (params: {
+  dayStart: Date;
+  monthStart: Date;
+}) => {
+  const earned = inArray(ordersTable.status, REVENUE_STATUSES);
+
+  const [[today], [month], [allTime], [awaiting], byStatus] = await Promise.all([
+    sumTotals(and(earned, gte(ordersTable.createdAt, params.dayStart))),
+    sumTotals(and(earned, gte(ordersTable.createdAt, params.monthStart))),
+    sumTotals(earned),
+    sumTotals(eq(ordersTable.status, "pending")),
+    db
+      .select({ status: ordersTable.status, value: count() })
+      .from(ordersTable)
+      .groupBy(ordersTable.status),
+  ]);
+
+  const counts = Object.fromEntries(
+    orderStatusEnum.enumValues.map((status) => [status, 0]),
+  ) as Record<OrderStatus, number>;
+
+  for (const row of byStatus) {
+    counts[row.status] = row.value;
+  }
+
+  return {
+    today: { orders: today.orders, revenue: today.revenue },
+    month: { orders: month.orders, revenue: month.revenue },
+    allTime: { orders: allTime.orders, revenue: allTime.revenue },
+    awaiting: { orders: awaiting.orders, value: awaiting.revenue },
+    byStatus: counts,
+    placed: Object.values(counts).reduce((sum, value) => sum + value, 0),
+  };
+};
+
+const localDayExpression = (tzOffset: number) =>
+  sql<string>`to_char(${ordersTable.createdAt} - make_interval(mins => ${tzOffset}::int), 'YYYY-MM-DD')`;
+
+export const getRevenueByDay = async (params: {
+  since: Date;
+  tzOffset: number;
+}) => {
+  const day = localDayExpression(params.tzOffset);
+
+  return db
+    .select({
+      day,
+      orders: count(),
+      revenue: sql<string>`coalesce(sum(${ordersTable.total}), 0)::text`,
+    })
+    .from(ordersTable)
+    .where(
+      and(
+        inArray(ordersTable.status, REVENUE_STATUSES),
+        gte(ordersTable.createdAt, params.since),
+      ),
+    )
+    .groupBy(sql`1`)
+    .orderBy(sql`1`);
+};
+
+export const getTopTitles = async (limit: number) => {
+  const units = sql<number>`sum(${orderItemsTable.quantity})::int`;
+
+  return db
+    .select({
+      bookId: orderItemsTable.bookId,
+      title: orderItemsTable.title,
+      units,
+      revenue: sql<string>`sum(${orderItemsTable.price} * ${orderItemsTable.quantity})::text`,
+    })
+    .from(orderItemsTable)
+    .innerJoin(ordersTable, eq(ordersTable.id, orderItemsTable.orderId))
+    .where(inArray(ordersTable.status, REVENUE_STATUSES))
+    .groupBy(orderItemsTable.bookId, orderItemsTable.title)
+    .orderBy(desc(units))
+    .limit(limit);
 };
