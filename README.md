@@ -1,6 +1,6 @@
-# Book Store API
+# Kawi API
 
-A REST API for a chess-bookstore catalog — books and authors with full-text search, pagination, and sorting — plus a complete authentication and authorization stack, transactional email, and background job processing.
+A REST API for a chess-book catalog — books and authors with full-text search, pagination, and sorting — plus a complete authentication and authorization stack, transactional email, and background job processing.
 
 Built with **Bun**, **Express 5**, **TypeScript**, **Drizzle ORM**, **PostgreSQL**, and **Zod**.
 
@@ -72,7 +72,7 @@ bun run worker
 |----------|----------|---------|-------|
 | `NODE_ENV` | no | `development` | `development` \| `production` \| `test` |
 | `PORT` | no | `8000` | |
-| `DATABASE_URL` | **yes** | — | e.g. `postgres://book-store:book-store@localhost:5432/book-store` |
+| `DATABASE_URL` | **yes** | — | e.g. `postgres://kawi:kawi@localhost:5432/kawi` |
 | `JWT_SECRET` | **yes** | — | min 32 chars |
 | `ACCESS_TOKEN_TTL_MINUTES` | no | `5` | access-token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | no | `7` | refresh-token lifetime |
@@ -166,7 +166,7 @@ All domain endpoints are prefixed with **`/api/v1`** (e.g. `POST /api/v1/auth/lo
 ## Project Structure
 
 ```
-book-store/
+kawi-backend/
 ├── index.ts            # API entry (HTTP server)
 ├── worker.ts           # background worker (BullMQ consumer + cron)
 ├── db/                 # Drizzle client + schema aggregation

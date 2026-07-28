@@ -1,5 +1,5 @@
 {
-  "name": "book-store",
+  "name": "kawi-backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -10,8 +10,8 @@
     "db:studio": "drizzle-kit studio",
     "worker": "bun worker.ts",
     "worker:dev": "bun --watch worker.ts",
-    "test:db": "docker compose exec -T postgres psql -U book-store -d book-store -c 'CREATE DATABASE \"book-store-test\"' || true",
-    "test": "NODE_ENV=test DATABASE_URL=postgres://book-store:book-store@localhost:5432/book-store-test REDIS_URL=redis://localhost:6379/1 bun test"
+    "test:db": "docker compose exec -T postgres psql -U kawi -d kawi -c 'CREATE DATABASE \"kawi-test\"' || true",
+    "test": "NODE_ENV=test DATABASE_URL=postgres://kawi:kawi@localhost:5432/kawi-test REDIS_URL=redis://localhost:6379/1 bun test"
   },
   "keywords": [],
   "author": "",

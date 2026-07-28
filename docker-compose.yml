@@ -4,13 +4,13 @@ services:
     ports:
       - 5432:5432
     environment:
-      POSTGRES_DB: book-store
-      POSTGRES_USER: book-store
-      POSTGRES_PASSWORD: book-store
+      POSTGRES_DB: kawi
+      POSTGRES_USER: kawi
+      POSTGRES_PASSWORD: kawi
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U book-store"]
+      test: ["CMD-SHELL", "pg_isready -U kawi"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -30,7 +30,7 @@ services:
     command: bunx drizzle-kit migrate
     env_file: .env
     environment:
-      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+      DATABASE_URL: postgres://kawi:kawi@postgres:5432/kawi
     depends_on:
       postgres:
         condition: service_healthy
@@ -42,7 +42,7 @@ services:
       - ${APP_PORT:-8000}:8000
     env_file: .env
     environment:
-      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+      DATABASE_URL: postgres://kawi:kawi@postgres:5432/kawi
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
@@ -57,7 +57,7 @@ services:
     command: bun worker.ts
     env_file: .env
     environment:
-      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+      DATABASE_URL: postgres://kawi:kawi@postgres:5432/kawi
       REDIS_URL: redis://redis:6379
     depends_on:
       postgres:

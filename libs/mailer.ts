@@ -29,6 +29,6 @@ export const sendMail = async (opts: {
   html: string;
   text: string;
 }): Promise<void> => {
-  const from = env.EMAIL_FROM ?? env.SMTP_USER ?? "no-reply@bookstore.dev";
+  const from = env.EMAIL_FROM ?? env.SMTP_USER ?? "no-reply@kawi.dev";
   await getTransporter().sendMail({ from, ...opts });
 };
