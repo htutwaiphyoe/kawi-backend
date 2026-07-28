@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "types": ["node", "bun"],
+    "paths": {
+      "@/*": ["./*"]
+    },
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noUncheckedSideEffectImports": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  }
+}

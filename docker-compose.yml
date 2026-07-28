@@ -1,19 +1,71 @@
 services:
   postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: pyawmal
-      POSTGRES_PASSWORD: pyawmal
-      POSTGRES_DB: pyawmal
+    image: postgres:17.4
     ports:
-      - '5432:5432'
+      - 5432:5432
+    environment:
+      POSTGRES_DB: book-store
+      POSTGRES_USER: book-store
+      POSTGRES_PASSWORD: book-store
     volumes:
-      - pyawmal-pg:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U pyawmal']
+      test: ["CMD-SHELL", "pg_isready -U book-store"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7.4
+    ports:
+      - 6379:6379
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: .
+    command: bunx drizzle-kit migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build: .
+    command: bun index.ts
+    ports:
+      - ${APP_PORT:-8000}:8000
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    build: .
+    command: bun worker.ts
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://book-store:book-store@postgres:5432/book-store
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
-  pyawmal-pg:
+  pgdata:
